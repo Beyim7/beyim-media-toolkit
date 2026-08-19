@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>BEYIM | Ultimate Client-Side Utility</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { darkMode:'class', theme:{ extend:{ colors:{ dark:'#090a0f', panel:'#13151f', primary:'#6366f1', secondary:'#a855f7' }, fontFamily:{ sans:['Inter','system-ui','sans-serif'] } } } }
+</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="vendor/ffmpeg.js"></script>
+<script src="vendor/ffmpeg-util.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#475569}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;background:transparent}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;height:16px;width:16px;border-radius:50%;background:#6366f1;cursor:pointer;margin-top:-6px;box-shadow:0 0 10px rgba(99,102,241,.5)}
+input[type=range]::-webkit-slider-runnable-track{width:100%;height:4px;cursor:pointer;background:#334155;border-radius:2px}
+.glass{background:rgba(19,21,31,.65);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08)}
+.glass-panel{background:linear-gradient(145deg,rgba(30,41,59,.4) 0%,rgba(15,23,42,.4) 100%);border:1px solid rgba(255,255,255,.05);box-shadow:0 8px 32px 0 rgba(0,0,0,.3)}
+.trim-thumb{position:absolute;top:0;left:0;width:100%;margin:0;pointer-events:none;background:transparent}
+.trim-thumb::-webkit-slider-thumb{pointer-events:auto}
+.trim-thumb::-webkit-slider-runnable-track{background:transparent}
+.ratio-btn{padding:6px 12px;border-radius:8px;font-size:12px;background:#1e293b;color:#94a3b8;border:1px solid transparent}
+.ratio-btn.ratio-active{background:rgba(99,102,241,.15);color:#a5b4fc;border-color:#6366f1}
+.crop-handle{position:absolute;width:16px;height:16px;background:#6366f1;border:2px solid white;border-radius:50%;touch-action:none}
+</style>
+</head>
+<body class="bg-dark text-slate-200 h-screen w-screen overflow-x-hidden flex antialiased selection:bg-primary selection:text-white">
+
+<div id="sidebar-overlay" class="fixed inset-0 bg-black/60 z-20 hidden md:hidden"></div>
+
+<aside id="sidebar" class="w-72 h-full glass border-r border-white/5 flex flex-col z-30 fixed md:static inset-y-0 left-0 -translate-x-full md:translate-x-0 transition-transform duration-300">
+  <div class="p-6 flex items-center gap-3 border-b border-white/5">
+    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/20">
+      <i data-lucide="layers" class="text-white w-6 h-6"></i>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">BEYIM</h1>
+      <p class="text-xs text-slate-500">Local processing engine</p>
+    </div>
+  </div>
+  <nav class="flex-1 overflow-y-auto py-6 px-4 space-y-1" id="nav-container"></nav>
+  <div class="p-4 border-t border-white/5 text-xs text-slate-500 flex items-center gap-2">
+    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i> 100% Client-Side. Zero Uploads.
+  </div>
+</aside>
+
+<main class="flex-1 h-full relative overflow-y-auto bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMSIgZmlsbD0icmdiYSgyNTUsIDI1NSwgMjU1LCAwLjA1KSIvPjwvc3ZnPg==')]">
+  <header class="h-16 md:h-20 px-4 md:px-10 flex items-center justify-between sticky top-0 z-10 glass">
+    <div class="flex items-center min-w-0">
+      <button id="btn-menu" class="md:hidden mr-3 p-2 rounded-lg hover:bg-white/5 flex-shrink-0"><i data-lucide="menu" class="w-5 h-5 text-white"></i></button>
+      <div class="min-w-0">
+        <h2 class="text-lg md:text-2xl font-semibold tracking-tight text-white truncate" id="ws-title">Select a Tool</h2>
+        <p class="text-xs md:text-sm text-slate-400 mt-0.5 md:mt-1 truncate" id="ws-desc">Choose a utility from the sidebar to begin.</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto space-y-6 pb-24">
+
+    <div id="dropzone" class="glass-panel rounded-2xl border-2 border-dashed border-slate-700 hover:border-primary/50 transition-all duration-300 group cursor-pointer relative overflow-hidden">
+      <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+      <div class="p-8 md:p-16 flex flex-col items-center justify-center text-center space-y-4" id="dropzone-idle">
+        <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-slate-800/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-xl">
+          <i data-lucide="upload-cloud" class="w-8 h-8 md:w-10 md:h-10 text-primary"></i>
+        </div>
+        <div>
+          <p class="text-base md:text-lg font-medium text-slate-200">Click or drag and drop your file</p>
+          <p class="text-xs md:text-sm text-slate-500 mt-1" id="dropzone-accept-text">Supported formats...</p>
+        </div>
+      </div>
+      <div class="p-6 md:p-8 hidden flex-col items-center justify-center space-y-4 md:space-y-6 relative z-20 bg-panel/90 backdrop-blur-sm h-full" id="dropzone-active">
+        <button id="btn-remove-file" class="absolute top-4 right-4 p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors z-30">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+        <div class="w-20 h-20 md:w-24 md:h-24 rounded-xl bg-slate-800 flex items-center justify-center border border-white/10 shadow-lg overflow-hidden relative">
+          <img id="file-preview-img" class="hidden w-full h-full object-cover">
+          <i data-lucide="file" id="file-preview-icon" class="w-10 h-10 text-primary"></i>
+        </div>
+        <div class="text-center px-2">
+          <p class="font-medium text-base md:text-lg text-white truncate max-w-[280px] md:max-w-md" id="file-name">filename.ext</p>
+          <p class="text-xs md:text-sm text-slate-400 mt-1"><span id="file-size">0 MB</span> • <span id="file-type">video/mp4</span></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="controls-section" class="glass-panel p-5 md:p-8 rounded-2xl hidden opacity-0 transition-opacity duration-300">
+      <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-6">Processing Parameters</h3>
+      <div id="dynamic-controls" class="space-y-6"></div>
+      <div class="mt-6 pt-6 border-t border-white/5">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Output File Name</label>
+        <input type="text" id="param-filename" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-primary transition-colors" placeholder="filename">
+      </div>
+      <div class="mt-8 pt-8 border-t border-white/5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <div id="status-text" class="text-sm text-slate-400 flex items-center gap-2">
+          <i data-lucide="info" class="w-4 h-4"></i> Ready to process.
+        </div>
+        <button id="btn-process" class="w-full sm:w-auto bg-gradient-to-r from-primary to-secondary hover:from-indigo-500 hover:to-purple-500 text-white font-medium py-3 px-8 rounded-xl shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
+          <i data-lucide="zap" class="w-5 h-5"></i><span id="btn-process-text">Process File</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="progress-section" class="glass-panel p-5 md:p-8 rounded-2xl hidden">
+      <div class="flex justify-between text-sm mb-3 font-medium">
+        <span class="text-primary animate-pulse flex items-center gap-2"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Processing...</span>
+        <span id="progress-pct" class="text-white">0%</span>
+      </div>
+      <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner border border-white/5">
+        <div id="progress-bar" class="bg-gradient-to-r from-primary to-secondary h-3 rounded-full transition-all duration-300 w-0"></div>
+      </div>
+      <p id="progress-log" class="text-xs text-slate-500 mt-4 font-mono truncate"></p>
+    </div>
+
+    <div id="output-section" class="glass-panel p-5 md:p-8 rounded-2xl hidden border border-emerald-500/20 bg-emerald-500/5">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-4 min-w-0">
+          <div class="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
+            <i data-lucide="check-circle" class="w-6 h-6"></i>
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-lg font-medium text-white">Processing Complete!</h3>
+            <p class="text-sm text-slate-400 mt-1 truncate">Saved as: <span id="out-name" class="text-slate-300 font-mono">file</span> (<span id="out-size">0 MB</span>)</p>
+          </div>
+        </div>
+        <button id="btn-download" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 px-6 rounded-xl shadow-lg shadow-emerald-900/50 transition-all flex items-center justify-center gap-2">
+          <i data-lucide="download" class="w-5 h-5"></i> Download Result
+        </button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const { FFmpeg } = window.FFmpegWASM;
+const { fetchFile, toBlobURL } = window.FFmpegUtil;
+
+let ffmpegInstance = null;
+let currentFile = null;
+let activeTool = null;
+let processedBlob = null;
+let finalFilename = '';
+let videoDuration = 0;
+let imgCache = { img:null };
+let cropImgEl=null, cropNaturalW=0, cropNaturalH=0, cropDisplayScale=1, cropBox={x:0,y:0,w:0,h:0}, cropRatio=null, cropDrag=null, suppressCropInputEvents=false;
+const PX_PER_MM = 96/25.4;
+
+const formatBytes=(bytes,decimals=2)=>{ if(!+bytes) return '0 Bytes'; const k=1024,dm=decimals<0?0:decimals,sizes=['Bytes','KB','MB','GB']; const i=Math.floor(Math.log(bytes)/Math.log(k)); return `${parseFloat((bytes/Math.pow(k,i)).toFixed(dm))} ${sizes[i]}`; };
+const formatTime=(s)=>{ s=Math.max(0,s||0); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60); return [h,m,sec].map(v=>String(v).padStart(2,'0')).join(':'); };
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const loadImageToCanvas=(file)=>new Promise((resolve,reject)=>{ const img=new Image(); const url=URL.createObjectURL(file); img.onload=()=>{URL.revokeObjectURL(url);resolve(img);}; img.onerror=()=>reject(new Error("Failed to load image")); img.src=url; });
+const getVideoDuration=(file)=>new Promise((resolve)=>{ const v=document.createElement('video'); v.preload='metadata'; v.onloadedmetadata=()=>{URL.revokeObjectURL(v.src);resolve(v.duration);}; v.src=URL.createObjectURL(file); });
+const downloadFile=(blob,filename)=>{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); };
+
+function updateSizeLabel(){
+  const sizeVal=document.getElementById('size-val'), origLabel=document.getElementById('orig-size-label');
+  if(!currentFile||!sizeVal) return;
+  const pct=parseInt(document.getElementById('param-size').value);
+  sizeVal.innerText=formatBytes(currentFile.size*(pct/100));
+  if(origLabel) origLabel.innerText=formatBytes(currentFile.size);
+}
+
+function onTrimInput(){
+  const sEl=document.getElementById('trim-start'), eEl=document.getElementById('trim-end');
+  if(!sEl) return;
+  let s=parseInt(sEl.value), e=parseInt(eEl.value);
+  if(e-s<20){ if(s>980){s=980;sEl.value=s;} e=s+20; if(e>1000){e=1000;s=980;sEl.value=s;} eEl.value=e; }
+  const dur=videoDuration||0, startSec=(s/1000)*dur, endSec=(e/1000)*dur;
+  document.getElementById('trim-start-label').innerText=formatTime(startSec);
+  document.getElementById('trim-end-label').innerText=formatTime(endSec);
+  document.getElementById('trim-dur-label').innerText=formatTime(endSec-startSec)+' selected';
+  const fill=document.getElementById('trim-range-fill');
+  fill.style.left=(s/10)+'%'; fill.style.width=((e-s)/10)+'%';
+}
+
+let imgPreviewTimer=null;
+function previewImgSize(){
+  clearTimeout(imgPreviewTimer);
+  imgPreviewTimer=setTimeout(()=>{
+    if(!imgCache.img) return;
+    const q=document.getElementById('param-img-q').value/100;
+    const c=document.createElement('canvas'); c.width=imgCache.img.width; c.height=imgCache.img.height;
+    c.getContext('2d').drawImage(imgCache.img,0,0);
+    c.toBlob(b=>{ const el=document.getElementById('img-size-val'); if(el&&b) el.innerText='≈ '+formatBytes(b.size); }, 'image/jpeg', q);
+  }, 150);
+}
+
+function renderCropBox(){
+  if(!cropImgEl) return;
+  const scale=cropImgEl.clientWidth/cropNaturalW; cropDisplayScale=scale;
+  const box=document.getElementById('crop-box');
+  box.style.left=(cropBox.x*scale)+'px'; box.style.top=(cropBox.y*scale)+'px';
+  box.style.width=(cropBox.w*scale)+'px'; box.style.height=(cropBox.h*scale)+'px';
+  updateInputsFromBox();
+}
+function unitFactor(){ const u=document.getElementById('crop-unit').value; if(u==='mm') return PX_PER_MM; if(u==='cm') return PX_PER_MM*10; return 1; }
+function updateInputsFromBox(){
+  suppressCropInputEvents=true; const f=unitFactor();
+  document.getElementById('crop-w-input').value=(cropBox.w/f).toFixed(f===1?0:1);
+  document.getElementById('crop-h-input').value=(cropBox.h/f).toFixed(f===1?0:1);
+  suppressCropInputEvents=false;
+}
+function onCropInputChange(){
+  if(suppressCropInputEvents) return;
+  const f=unitFactor();
+  let w=parseFloat(document.getElementById('crop-w-input').value)*f, h=parseFloat(document.getElementById('crop-h-input').value)*f;
+  if(!w||!h) return;
+  if(cropRatio) h=w/cropRatio;
+  w=clamp(w,10,cropNaturalW); h=clamp(h,10,cropNaturalH);
+  cropBox.w=w; cropBox.h=h;
+  cropBox.x=clamp(cropBox.x,0,cropNaturalW-w); cropBox.y=clamp(cropBox.y,0,cropNaturalH-h);
+  renderCropBox();
+}
+function applyRatioToBox(){
+  if(!cropRatio) return;
+  let w=cropBox.w, h=w/cropRatio;
+  if(h>cropNaturalH){h=cropNaturalH;w=h*cropRatio;}
+  if(w>cropNaturalW){w=cropNaturalW;h=w/cropRatio;}
+  const cx=cropBox.x+cropBox.w/2, cy=cropBox.y+cropBox.h/2;
+  cropBox.w=w; cropBox.h=h;
+  cropBox.x=clamp(cx-w/2,0,cropNaturalW-w); cropBox.y=clamp(cy-h/2,0,cropNaturalH-h);
+  renderCropBox();
+}
+function setupCropPointerEvents(){
+  const box=document.getElementById('crop-box');
+  box.onpointerdown=(e)=>{ if(e.target.classList.contains('crop-handle')) return; e.preventDefault(); cropDrag={mode:'move',startX:e.clientX,startY:e.clientY,start:{...cropBox}}; box.setPointerCapture(e.pointerId); };
+  document.querySelectorAll('.crop-handle').forEach(h=>{
+    h.onpointerdown=(e)=>{ e.preventDefault(); e.stopPropagation(); cropDrag={mode:h.dataset.dir,startX:e.clientX,startY:e.clientY,start:{...cropBox}}; h.setPointerCapture(e.pointerId); };
+  });
+  const stage=document.getElementById('crop-stage');
+  stage.onpointermove=(e)=>{
+    if(!cropDrag) return;
+    const scale=cropDisplayScale||1, dx=(e.clientX-cropDrag.startX)/scale, dy=(e.clientY-cropDrag.startY)/scale, s=cropDrag.start;
+    if(cropDrag.mode==='move'){
+      cropBox.x=clamp(s.x+dx,0,cropNaturalW-s.w); cropBox.y=clamp(s.y+dy,0,cropNaturalH-s.h);
+    } else {
+      let {x,y,w,h}=s;
+      if(cropDrag.mode.includes('e')) w=clamp(s.w+dx,20,cropNaturalW-s.x);
+      if(cropDrag.mode.includes('s')) h=clamp(s.h+dy,20,cropNaturalH-s.y);
+      if(cropDrag.mode.includes('w')){ w=clamp(s.w-dx,20,s.x+s.w); x=s.x+s.w-w; }
+      if(cropDrag.mode.includes('n')){ h=clamp(s.h-dy,20,s.y+s.h); y=s.y+s.h-h; }
+      if(cropRatio){ h=w/cropRatio; if(cropDrag.mode.includes('n')) y=s.y+s.h-h; }
+      cropBox={x,y,w,h};
+    }
+    renderCropBox();
+  };
+  stage.onpointerup=()=>{cropDrag=null;}; stage.onpointerleave=()=>{};
+  window.addEventListener('resize',()=>{ if(cropImgEl) renderCropBox(); });
+}
+function initCropStage(){
+  const stage=document.getElementById('crop-stage');
+  if(stage.dataset.inited){ updateInputsFromBox(); return; }
+  stage.dataset.inited='1';
+  setupCropPointerEvents();
+  document.querySelectorAll('.ratio-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('ratio-active'));
+      btn.classList.add('ratio-active');
+      const r=btn.dataset.ratio;
+      if(r==='free') cropRatio=null; else { const [a,b2]=r.split(':').map(Number); cropRatio=a/b2; applyRatioToBox(); }
+    });
+  });
+  document.getElementById('crop-w-input').addEventListener('input',onCropInputChange);
+  document.getElementById('crop-h-input').addEventListener('input',onCropInputChange);
+  document.getElementById('crop-unit').addEventListener('change',updateInputsFromBox);
+}
+
+const TOOLS = {
+  'vid-mp3': { id:'vid-mp3', icon:'music', title:'Video to MP3', category:'Video', desc:'Extract high-quality audio from your video files instantly.', accept:'video/*', btnText:'Extract Audio', controls:``,
+    process: async (file) => {
+      const ffmpeg=await getFFmpeg(); const inName='input'+getExt(file.name);
+      await ffmpeg.writeFile(inName, await fetchFile(file));
+      await ffmpeg.exec(['-i',inName,'-vn','-ar','44100','-ac','2','-b:a','192k','output.mp3']);
+      const data=await ffmpeg.readFile('output.mp3'); await ffmpeg.deleteFile(inName); await ffmpeg.deleteFile('output.mp3');
+      return { blob:new Blob([data.buffer],{type:'audio/mp3'}), ext:'mp3' };
+    }
+  },
+  'vid-comp': { id:'vid-comp', icon:'minimize', title:'Video Compressor', category:'Video', desc:'Shrink your video to a target size, fast.', accept:'video/*', btnText:'Compress Video',
+    controls:`<div><div class="flex justify-between mb-2"><label class="text-sm font-medium text-slate-300">Target Size</label><span id="size-val" class="text-sm font-mono text-primary font-bold">--</span></div><input type="range" id="param-size" min="10" max="90" value="50" oninput="updateSizeLabel()"><div class="flex justify-between text-xs text-slate-500 mt-2"><span>Smaller file</span><span>Closer to original</span></div><p class="text-xs text-slate-500 mt-3">Original: <span id="orig-size-label">--</span></p></div>`,
+    onLoad: async (file) => { videoDuration = await getVideoDuration(file); updateSizeLabel(); },
+    process: async (file) => {
+      const pct=parseInt(document.getElementById('param-size').value);
+      const targetKbit=(file.size*(pct/100))*8/1000;
+      const dur=videoDuration||10, audioKbps=96;
+      let vKbps=Math.floor(targetKbit/dur - audioKbps); if(vKbps<150) vKbps=150;
+      const ffmpeg=await getFFmpeg(); const inName='input'+getExt(file.name);
+      await ffmpeg.writeFile(inName, await fetchFile(file));
+      await ffmpeg.exec(['-i',inName,'-c:v','libx264','-preset','ultrafast','-b:v',vKbps+'k','-maxrate',Math.floor(vKbps*1.4)+'k','-bufsize',(vKbps*2)+'k','-c:a','aac','-b:a',audioKbps+'k','-movflags','+faststart','output.mp4']);
+      const data=await ffmpeg.readFile('output.mp4'); await ffmpeg.deleteFile(inName); await ffmpeg.deleteFile('output.mp4');
+      return { blob:new Blob([data.buffer],{type:'video/mp4'}), ext:'mp4' };
+    }
+  },
+  'vid-trim': { id:'vid-trim', icon:'scissors', title:'Video Trimmer', category:'Video', desc:'Drag the handles to select the segment to keep.', accept:'video/*', btnText:'Trim Video',
+    controls:`<div><div class="flex justify-between text-xs font-mono text-slate-400 mb-3"><span id="trim-start-label">00:00:00</span><span id="trim-dur-label" class="text-primary"></span><span id="trim-end-label">00:00:00</span></div><div class="relative h-6" id="trim-track"><div class="absolute top-1/2 -translate-y-1/2 w-full h-1.5 bg-slate-800 rounded-full"></div><div class="absolute top-1/2 -translate-y-1/2 h-1.5 bg-gradient-to-r from-primary to-secondary rounded-full" id="trim-range-fill"></div><input type="range" id="trim-start" min="0" max="1000" value="0" class="trim-thumb" oninput="onTrimInput()"><input type="range" id="trim-end" min="0" max="1000" value="1000" class="trim-thumb" oninput="onTrimInput()"></div></div>`,
+    onLoad: async (file) => { videoDuration=await getVideoDuration(file); document.getElementById('trim-start').value=0; document.getElementById('trim-end').value=1000; onTrimInput(); },
+    process: async (file) => {
+      const dur=videoDuration||0;
+      const s=(parseInt(document.getElementById('trim-start').value)/1000)*dur;
+      const e=(parseInt(document.getElementById('trim-end').value)/1000)*dur;
+      const ffmpeg=await getFFmpeg(); const inName='input'+getExt(file.name);
+      await ffmpeg.writeFile(inName, await fetchFile(file));
+      // '-c copy' cuts at the nearest keyframe, which can land mid-GOP and
+      // corrupt the video stream (some players then only play the audio
+      // track). Re-encoding with '-ss' before '-i' is fast (uses seek) and
+      // guarantees an accurate, valid cut on both streams.
+      await ffmpeg.exec(['-ss',s.toFixed(2),'-i',inName,'-to',(e-s).toFixed(2),'-c:v','libx264','-preset','ultrafast','-c:a','aac','output.mp4']);
+      const data=await ffmpeg.readFile('output.mp4'); await ffmpeg.deleteFile(inName); await ffmpeg.deleteFile('output.mp4');
+      return { blob:new Blob([data.buffer],{type:'video/mp4'}), ext:'mp4' };
+    }
+  },
+  'img-comp': { id:'img-comp', icon:'image-minus', title:'Image Compressor', category:'Image', desc:'Reduce image file size — live size preview as you slide.', accept:'image/jpeg, image/png, image/webp', btnText:'Compress Image',
+    controls:`<div><div class="flex justify-between mb-2"><label class="text-sm font-medium text-slate-300">Quality</label><span id="img-size-val" class="text-sm font-mono text-primary font-bold">--</span></div><input type="range" id="param-img-q" min="1" max="100" value="80" oninput="previewImgSize()"><p class="text-xs text-slate-500 mt-2">Original: <span id="img-orig-size">--</span></p></div>`,
+    onLoad: async (file) => { imgCache.img=await loadImageToCanvas(file); document.getElementById('img-orig-size').innerText=formatBytes(file.size); previewImgSize(); },
+    process: async (file) => {
+      const q=parseInt(document.getElementById('param-img-q').value)/100;
+      const img=imgCache.img || await loadImageToCanvas(file);
+      const canvas=document.createElement('canvas'); canvas.width=img.width; canvas.height=img.height;
+      canvas.getContext('2d').drawImage(img,0,0);
+      return new Promise((resolve,reject)=>{ canvas.toBlob(blob=>{ if(blob) resolve({blob,ext:'jpg'}); else reject(new Error("Compression failed")); }, 'image/jpeg', q); });
+    }
+  },
+  'img-res': { id:'img-res', icon:'scaling', title:'Image Resizer & Crop', category:'Image', desc:'Drag to crop, pick a ratio, or set exact px/mm/cm.', accept:'image/*', btnText:'Crop & Resize',
+    controls:`<div class="space-y-5">
+      <div class="flex flex-wrap gap-2" id="ratio-presets">
+        <button type="button" data-ratio="free" class="ratio-btn ratio-active">Free</button>
+        <button type="button" data-ratio="1:1" class="ratio-btn">1:1</button>
+        <button type="button" data-ratio="4:3" class="ratio-btn">4:3</button>
+        <button type="button" data-ratio="16:9" class="ratio-btn">16:9</button>
+        <button type="button" data-ratio="9:16" class="ratio-btn">9:16</button>
+        <button type="button" data-ratio="3:2" class="ratio-btn">3:2</button>
+      </div>
+      <div class="w-full flex justify-center bg-black/30 rounded-xl p-2 overflow-hidden">
+        <div class="relative inline-block" id="crop-stage" style="touch-action:none;">
+          <img id="crop-img" class="max-w-full block select-none rounded-lg" draggable="false" style="max-height:340px;">
+          <div id="crop-box" class="absolute border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] cursor-move">
+            <div class="crop-handle" data-dir="nw" style="top:-8px;left:-8px;cursor:nwse-resize;"></div>
+            <div class="crop-handle" data-dir="ne" style="top:-8px;right:-8px;cursor:nesw-resize;"></div>
+            <div class="crop-handle" data-dir="sw" style="bottom:-8px;left:-8px;cursor:nesw-resize;"></div>
+            <div class="crop-handle" data-dir="se" style="bottom:-8px;right:-8px;cursor:nwse-resize;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div><label class="block text-xs text-slate-400 mb-1">Width</label><input type="number" id="crop-w-input" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"></div>
+        <div><label class="block text-xs text-slate-400 mb-1">Height</label><input type="number" id="crop-h-input" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"></div>
+        <div><label class="block text-xs text-slate-400 mb-1">Unit</label><select id="crop-unit" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"><option value="px">px</option><option value="mm">mm</option><option value="cm">cm</option></select></div>
+      </div>
+    </div>`,
+    onLoad: async (file) => {
+      const url=URL.createObjectURL(file); const imgEl=document.getElementById('crop-img');
+      await new Promise(res=>{ imgEl.onload=res; imgEl.src=url; });
+      cropNaturalW=imgEl.naturalWidth; cropNaturalH=imgEl.naturalHeight; cropImgEl=imgEl; cropRatio=null;
+      document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('ratio-active'));
+      document.querySelector('[data-ratio="free"]').classList.add('ratio-active');
+      cropBox={ x:cropNaturalW*0.1, y:cropNaturalH*0.1, w:cropNaturalW*0.8, h:cropNaturalH*0.8 };
+      initCropStage(); renderCropBox();
+    },
+    process: async (file) => {
+      const c=document.createElement('canvas'); c.width=Math.round(cropBox.w); c.height=Math.round(cropBox.h);
+      c.getContext('2d').drawImage(cropImgEl, cropBox.x, cropBox.y, cropBox.w, cropBox.h, 0,0, c.width, c.height);
+      const ext=(file.type.split('/')[1])||'png';
+      return new Promise((resolve,reject)=>{ c.toBlob(blob=>{ if(blob) resolve({blob,ext}); else reject(new Error('Crop failed')); }, file.type||'image/png', 0.92); });
+    }
+  },
+  'img-conv': { id:'img-conv', icon:'file-type', title:'Image Converter', category:'Image', desc:'Convert images instantly across web formats.', accept:'image/*', btnText:'Convert Format',
+    controls:`<div><label class="block text-sm font-medium text-slate-300 mb-2">Output Format</label><select id="param-fmt" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors appearance-none"><option value="image/png">PNG</option><option value="image/jpeg">JPEG (JPG)</option><option value="image/webp">WEBP</option></select></div>`,
+    process: async (file) => {
+      const mime=document.getElementById('param-fmt').value; const ext=mime==='image/jpeg'?'jpg':mime.split('/')[1];
+      const img=await loadImageToCanvas(file); const canvas=document.createElement('canvas'); canvas.width=img.width; canvas.height=img.height;
+      const ctx=canvas.getContext('2d');
+      if(mime==='image/jpeg'){ ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+      ctx.drawImage(img,0,0);
+      return new Promise((resolve,reject)=>{ canvas.toBlob(blob=>{ if(blob) resolve({blob,ext}); else reject(new Error("Conversion failed")); }, mime, 0.9); });
+    }
+  }
+};
+
+const getExt=(name)=>{ const parts=name.split('.'); return parts.length>1?'.'+parts.pop().toLowerCase():'.mp4'; };
+const stripExt=(name)=>{ const parts=name.split('.'); if(parts.length>1) parts.pop(); return parts.join('.'); };
+
+async function getFFmpeg() {
+  if (ffmpegInstance) return ffmpegInstance;
+  const instance = new FFmpeg();
+  showProgressLog("Initializing FFmpeg core (first load takes a moment)...");
+  instance.on('log', ({ message }) => showProgressLog(message));
+  instance.on('progress', ({ progress }) => {
+    const p = Math.max(0, Math.min(100, Math.round(progress * 100)));
+    document.getElementById('progress-pct').innerText = p + '%';
+    document.getElementById('progress-bar').style.width = p + '%';
+  });
+  try {
+    await instance.load({
+      coreURL: await toBlobURL('vendor/ffmpeg-core.js', 'text/javascript'),
+      wasmURL: await toBlobURL('vendor/ffmpeg-core.wasm', 'application/wasm'),
+      classWorkerURL: 'vendor/814.ffmpeg.js',
+    });
+  } catch (err) {
+    showProgressLog("FFmpeg failed to load: " + (err && err.message ? err.message : err));
+    throw err;
+  }
+  ffmpegInstance = instance;
+  return ffmpegInstance;
+}
+
+const els = {
+  nav: document.getElementById('nav-container'), wsTitle: document.getElementById('ws-title'), wsDesc: document.getElementById('ws-desc'),
+  dropzone: document.getElementById('dropzone'), fileInput: document.getElementById('file-input'),
+  dzIdle: document.getElementById('dropzone-idle'), dzActive: document.getElementById('dropzone-active'), dzAcceptText: document.getElementById('dropzone-accept-text'),
+  btnRemove: document.getElementById('btn-remove-file'), fileName: document.getElementById('file-name'), fileSize: document.getElementById('file-size'), fileType: document.getElementById('file-type'),
+  previewImg: document.getElementById('file-preview-img'), previewIcon: document.getElementById('file-preview-icon'),
+  controlsSec: document.getElementById('controls-section'), dynControls: document.getElementById('dynamic-controls'),
+  btnProcess: document.getElementById('btn-process'), btnProcessText: document.getElementById('btn-process-text'),
+  progressSec: document.getElementById('progress-section'), progressLog: document.getElementById('progress-log'), progressBar: document.getElementById('progress-bar'), progressPct: document.getElementById('progress-pct'),
+  outputSec: document.getElementById('output-section'), outName: document.getElementById('out-name'), outSize: document.getElementById('out-size'), btnDownload: document.getElementById('btn-download')
+};
+
+function closeSidebar(){ document.getElementById('sidebar').classList.add('-translate-x-full'); document.getElementById('sidebar-overlay').classList.add('hidden'); }
+document.getElementById('btn-menu').addEventListener('click', ()=>{ document.getElementById('sidebar').classList.remove('-translate-x-full'); document.getElementById('sidebar-overlay').classList.remove('hidden'); });
+document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
+
+function initApp() {
+  let currentCat = '';
+  Object.values(TOOLS).forEach(t => {
+    if (t.category !== currentCat) {
+      currentCat = t.category;
+      const catLabel = document.createElement('div');
+      catLabel.className = 'text-xs font-bold text-slate-500 uppercase tracking-wider mt-4 mb-2 px-3';
+      catLabel.innerText = currentCat;
+      els.nav.appendChild(catLabel);
+    }
+    const btn = document.createElement('button');
+    btn.id = `nav-${t.id}`;
+    btn.innerHTML = `<i data-lucide="${t.icon}" class="w-4 h-4"></i> ${t.title}`;
+    btn.onclick = () => switchTool(t.id);
+    els.nav.appendChild(btn);
+  });
+  lucide.createIcons();
+  switchTool('vid-mp3');
+}
+
+function switchTool(id) {
+  activeTool = TOOLS[id];
+  Object.keys(TOOLS).forEach(k => {
+    const b = document.getElementById(`nav-${k}`); if (!b) return;
+    b.className = k===id ? 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group bg-primary/10 text-primary shadow-sm' : 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group text-slate-400 hover:bg-white/5 hover:text-slate-200';
+  });
+  els.wsTitle.innerText = activeTool.title;
+  els.wsDesc.innerText = activeTool.desc;
+  els.fileInput.accept = activeTool.accept;
+  els.dzAcceptText.innerText = `Supports ${activeTool.accept}`;
+  els.btnProcessText.innerText = activeTool.btnText;
+  els.dynControls.innerHTML = activeTool.controls ? activeTool.controls : `<div class="text-sm text-slate-500 italic flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500"></i> No additional configuration needed.</div>`;
+  lucide.createIcons();
+  resetWorkspace();
+  closeSidebar();
+}
+
+function resetWorkspace() {
+  currentFile = null; els.fileInput.value = '';
+  els.dzIdle.classList.remove('hidden'); els.dzActive.classList.add('hidden');
+  els.controlsSec.classList.add('hidden', 'opacity-0'); els.progressSec.classList.add('hidden'); els.outputSec.classList.add('hidden');
+  els.dropzone.classList.remove('border-primary', 'bg-primary/5'); processedBlob = null;
+}
+
+els.fileInput.addEventListener('change', async (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+els.btnRemove.addEventListener('click', (e) => { e.stopPropagation(); resetWorkspace(); });
+
+async function handleFile(file) {
+  const type = activeTool.category.toLowerCase();
+  if (!file.type.startsWith(type)) { alert(`Please upload a valid ${type} file.`); resetWorkspace(); return; }
+  currentFile = file;
+  els.fileName.innerText = file.name; els.fileSize.innerText = formatBytes(file.size); els.fileType.innerText = file.type || 'Unknown Format';
+  els.dzIdle.classList.add('hidden'); els.dzActive.classList.remove('hidden'); els.dzActive.classList.add('flex'); els.dropzone.classList.add('border-primary', 'bg-primary/5');
+  if (file.type.startsWith('image')) { els.previewIcon.classList.add('hidden'); els.previewImg.classList.remove('hidden'); els.previewImg.src = URL.createObjectURL(file); }
+  else { els.previewImg.classList.add('hidden'); els.previewIcon.classList.remove('hidden'); }
+  if (activeTool.onLoad) await activeTool.onLoad(file);
+  document.getElementById('param-filename').value = `${stripExt(file.name)}_${activeTool.id}`;
+  els.controlsSec.classList.remove('hidden'); setTimeout(() => els.controlsSec.classList.remove('opacity-0'), 50);
+  els.outputSec.classList.add('hidden');
+}
+
+function showProgressLog(msg) { els.progressLog.innerText = msg; }
+
+els.btnProcess.addEventListener('click', async () => {
+  if (!currentFile) return;
+  els.btnProcess.disabled = true; els.btnProcess.classList.add('opacity-50', 'cursor-not-allowed');
+  els.progressSec.classList.remove('hidden'); els.outputSec.classList.add('hidden');
+  els.progressBar.style.width = '0%'; els.progressPct.innerText = '0%'; showProgressLog("Starting process...");
+  try {
+    const result = await activeTool.process(currentFile);
+    processedBlob = result.blob;
+    const rawName = document.getElementById('param-filename').value.trim();
+    const safeName = rawName ? rawName.replace(/[\\/:*?"<>|]+/g, '_') : `${stripExt(currentFile.name)}_${activeTool.id}`;
+    finalFilename = `${safeName}.${result.ext}`;
+    els.outName.innerText = finalFilename; els.outSize.innerText = formatBytes(processedBlob.size);
+    els.progressSec.classList.add('hidden'); els.outputSec.classList.remove('hidden');
+  } catch (err) {
+    console.error(err); alert(`Processing failed: ${err.message || 'Unknown error'}`); els.progressSec.classList.add('hidden');
+  } finally {
+    els.btnProcess.disabled = false; els.btnProcess.classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+});
+
+els.btnDownload.addEventListener('click', () => { if (processedBlob) downloadFile(processedBlob, finalFilename); });
+
+['dragenter','dragover','dragleave','drop'].forEach(en => els.dropzone.addEventListener(en, e=>{e.preventDefault();e.stopPropagation();}, false));
+['dragenter','dragover'].forEach(en => els.dropzone.addEventListener(en, () => els.dropzone.classList.add('border-primary','bg-primary/10'), false));
+['dragleave','drop'].forEach(en => els.dropzone.addEventListener(en, () => { if(!currentFile) els.dropzone.classList.remove('border-primary','bg-primary/10'); }, false));
+els.dropzone.addEventListener('drop', (e) => { const files=e.dataTransfer.files; if(files.length){ els.fileInput.files=files; handleFile(files[0]); } });
+
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
