@@ -3,7 +3,7 @@
 
 A free, local-first media toolkit that runs entirely in your browser. No uploads, no server, no accounts — your files never leave your device.
 
-**[https://beyim7.github.io/beyim-media-toolkit/](#)** 
+# https://beyim7.github.io/beyim-media-toolkit/
 
 ## Features
 
